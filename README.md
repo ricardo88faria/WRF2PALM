@@ -15,8 +15,8 @@ To create_static_landuse.py script load a .tif file inside raw_landuse, use .cgf
 In order to create WRF forcing, create_dynamic.py script is run. WRF outputs must be placed inside raw_forcing folder. Script load north, south, east and west inside .cgf file, extract boundary conditions in the area set by user and interpolate to PALM configurations dx, dy, dz, nx, ny, nz created by create_static_topo.py script.
 If user didnt run create_static_topo script, a .cgf file must be setup with dx, dy, dz, nx, ny, nz, north, south, east and west fields.
 
-3. WRF forcing (create_radiation):
-If user want to force PALM with short and long wave radiation data, create_radiation.py must be run after create_dynamic.py. Script gets dynamic file and adds 2d radiation varying in time data usable in PALM.
+3.1. WRF forcing (create_radiation):
+If user want to force PALM with short and long wave radiation data, create_radiation.py must be run after create_dynamic.py. Script modify dynamic file and adds 2d radiation varying in time data usable in PALM.
 
 **Contacts:**
 
