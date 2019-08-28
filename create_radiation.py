@@ -23,8 +23,8 @@ from netCDF4 import Dataset, num2date
 from wrf import getvar, ALL_TIMES 
 import glob
 import pandas as pd
-import res_grid_change as rgc
-import nearest
+from tools import res_grid_change as rgc
+from tools import nearest
 
 
 cfg = pd.read_csv(case_name + '.cfg')

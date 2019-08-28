@@ -25,11 +25,10 @@ from wrf import getvar, ALL_TIMES, interplevel#, vinterp, destagger
 import time
 import glob
 import pandas as pd
-from pyproj import Proj 
 import scipy.interpolate as interpolate
-import res_grid_change as rgc
-import nearest
-import geostrophic
+from tools import res_grid_change as rgc
+from tools import nearest
+from tools import geostrophic
 
 
 dz_soil = np.array([0.01, 0.02, 0.04, 0.06, 0.14, 0.26, 0.54, 1.86])
