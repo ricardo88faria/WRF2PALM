@@ -16,7 +16,6 @@ case_name = 'madeira_50m_offline_nesting'   # PALM case name to fit WRF boundary
 wrf_domain = 'd02_airport'
 zone = '28'
 interp_mode = 'linear'  # linear
-#wrf_geos_dom_buffer = 15 # Grid buffer for WRF domain boundary's geostrophic profiles calc, number of cells from boundarys
 
 
 import numpy as np
