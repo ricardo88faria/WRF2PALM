@@ -7,6 +7,7 @@ Created on Mon Jul  2 12:08:53 2018
 
 Script to create Large-scale forcing data (boundary conditions) netcdf input for PALM following PALM Input Data Standard (PIDS) v1.9.
 my_test_setup_dynamic.nc – contains all dynamic data need to force PALM.
+Contains dynamic information for the run, such as time­dependent boundary conditions and the initial state of the atmosphere.
 
 """
 
@@ -24,19 +25,12 @@ from wrf import getvar, ALL_TIMES, interplevel#, vinterp, destagger
 import time
 import glob
 import pandas as pd
-from pyproj import Proj #, transform
+from pyproj import Proj 
 import scipy.interpolate as interpolate
-#from scipy.interpolate import interp1d
-#from scipy.signal import savgol_filter
-#import read_geo as rg
-#import calc_distance as cd
 import res_grid_change as rgc
 import nearest
 import geostrophic
-#import separate_nan as sepnan
-#import atmospheric
-#import matplotlib.pyplot as plt
-#import f90nml
+
 
 dz_soil = np.array([0.01, 0.02, 0.04, 0.06, 0.14, 0.26, 0.54, 1.86])
 
@@ -61,6 +55,11 @@ yv = yv[:-1]
 zw = z + np.gradient(z)/2
 zw = zw[:-1]
 zt = nc_st.variables['zt'][:]
+zt = dz * np.round(zt/dz)
+nzt_ns = np.array([zt[0, :], zt[-1, :]])/dz
+nzt_ew = np.array([zt[:, 0], zt[:, -1]])/dz
+origin_lat = nc_st.origin_lat
+origin_lon = nc_st.origin_lon
 nc_st.close()
 
 z_int_lev = np.arange(z[0], z[-1] + nz*dz + 1, dz)
@@ -159,27 +158,35 @@ time_setp_sec = (times[1]-times[0]).total_seconds()
 times_sec = np.arange(0, tot_sec+1, time_setp_sec)
 
 #change latlon projection to UTM meters
-myProj = Proj("+proj=utm +zone=" + zone + ", +north +ellps=WGS84 +datum=WGS84 +units=m +no_defs")
-inProj = Proj(init='epsg:4326')
-outProj = Proj(init='epsg:3061')
+#myProj = Proj("+proj=utm +zone=" + zone + ", +north +ellps=WGS84 +datum=WGS84 +units=m +no_defs")
+#inProj = Proj(init='epsg:4326')
+#outProj = Proj(init='epsg:3061')
 
+# create north-south, east-west and top boundary conditions and interpolate to new xyz shape
+u_ns_bc_tmp = np.zeros((times.shape[0], z.shape[0], 2, x.shape[0]))
+u_ew_bc_tmp = np.zeros((times.shape[0], z.shape[0], y.shape[0], 2))
+u_top_bc_tmp = np.zeros((times.shape[0], y.shape[0], x.shape[0]))
 
-# create north-south and east-west boundary conditions and interpolate to new xy shape
-u_ns_bc_tmp = np.empty((times.shape[0], z.shape[0], 2, x.shape[0]))
-u_ew_bc_tmp = np.empty((times.shape[0], z.shape[0], y.shape[0], 2))
-v_ns_bc_tmp = np.empty((times.shape[0], z.shape[0], 2, x.shape[0]))
-v_ew_bc_tmp = np.empty((times.shape[0], z.shape[0], y.shape[0], 2))
-w_ns_bc_tmp = np.empty((times.shape[0], z.shape[0], 2, x.shape[0]))
-w_ew_bc_tmp = np.empty((times.shape[0], z.shape[0], y.shape[0], 2))
-qv_ns_bc_tmp = np.empty((times.shape[0], z.shape[0], 2, x.shape[0]))
-qv_ew_bc_tmp = np.empty((times.shape[0], z.shape[0], y .shape[0], 2))
-pt_ns_bc_tmp = np.empty((times.shape[0], z.shape[0], 2, x.shape[0]))
-pt_ew_bc_tmp = np.empty((times.shape[0], z.shape[0], y.shape[0], 2))
+v_ns_bc_tmp = np.zeros((times.shape[0], z.shape[0], 2, x.shape[0]))
+v_ew_bc_tmp = np.zeros((times.shape[0], z.shape[0], y.shape[0], 2))
+v_top_bc_tmp = np.zeros((times.shape[0], y.shape[0], x.shape[0]))
+
+w_ns_bc_tmp = np.zeros((times.shape[0], z.shape[0], 2, x.shape[0]))
+w_ew_bc_tmp = np.zeros((times.shape[0], z.shape[0], y.shape[0], 2))
+w_top_bc_tmp = np.zeros((times.shape[0], y.shape[0], x.shape[0]))
+
+qv_ns_bc_tmp = np.zeros((times.shape[0], z.shape[0], 2, x.shape[0]))
+qv_ew_bc_tmp = np.zeros((times.shape[0], z.shape[0], y .shape[0], 2))
+qv_top_bc_tmp = np.zeros((times.shape[0], y.shape[0], x.shape[0]))
+
+pt_ns_bc_tmp = np.zeros((times.shape[0], z.shape[0], 2, x.shape[0]))
+pt_ew_bc_tmp = np.zeros((times.shape[0], z.shape[0], y.shape[0], 2))
+pt_top_bc_tmp = np.zeros((times.shape[0], y.shape[0], x.shape[0]))
 
 idx = [0, -1]
 for t in range(u.shape[0]):
     
-    # bring surface to 0 index to set height above ground for PALM
+#     bring surface to 0 index to set height above ground for PALM as  1st step for better interpolation values
     for x_idx in range(u.shape[3]) :
         for y_idx in range(u.shape[2]) :
             
@@ -188,40 +195,58 @@ for t in range(u.shape[0]):
             if nan_idx.size != 0 :
                 nan_idx = nan_idx[-1] + 1
                 
-                u[t,:-int(nan_idx),y_idx,x_idx] = u[t,int(nan_idx):,y_idx,x_idx]
-                u[t,-int(nan_idx):,y_idx,x_idx] = np.nan
-                v[t,:-int(nan_idx),y_idx,x_idx] = v[t,int(nan_idx):,y_idx,x_idx]
-                v[t,-int(nan_idx):,y_idx,x_idx] = np.nan
-                w[t,:-int(nan_idx),y_idx,x_idx] = w[t,int(nan_idx):,y_idx,x_idx]
-                w[t,-int(nan_idx):,y_idx,x_idx] = np.nan
-                pt[t,:-int(nan_idx),y_idx,x_idx] = pt[t,int(nan_idx):,y_idx,x_idx]
-                pt[t,-int(nan_idx):,y_idx,x_idx] = np.nan
-                qv[t,:-int(nan_idx),y_idx,x_idx] = qv[t,int(nan_idx):,y_idx,x_idx]
-                qv[t,-int(nan_idx):,y_idx,x_idx] = np.nan
+                u[t,:,y_idx,x_idx] = rgc.grid_points_change_1darray(u[t,int(nan_idx):,y_idx,x_idx], u.shape[1])
+                v[t,:,y_idx,x_idx] = rgc.grid_points_change_1darray(v[t,int(nan_idx):,y_idx,x_idx], v.shape[1])
+                w[t,:,y_idx,x_idx] = rgc.grid_points_change_1darray(w[t,int(nan_idx):,y_idx,x_idx], w.shape[1])
+                pt[t,:,y_idx,x_idx] = rgc.grid_points_change_1darray(pt[t,int(nan_idx):,y_idx,x_idx], pt.shape[1])
+                qv[t,:,y_idx,x_idx] = rgc.grid_points_change_1darray(qv[t,int(nan_idx):,y_idx,x_idx], qv.shape[1])
     
-    # interpolate/extrapolate for idx max and min (N-S and E-W)
     for i in idx:
         
         
-        u_ns_bc_tmp[t, :, i , :] = rgc.grid_points_change(u[t,:z.shape[0],i,:], x.shape[0], z.shape[0], interp_mode)
-        v_ns_bc_tmp[t, :, i , :] = rgc.grid_points_change(v[t,:z.shape[0],i,:], x.shape[0], z.shape[0], interp_mode)
-        w_ns_bc_tmp[t, :, i , :] = rgc.grid_points_change(w[t,:z.shape[0],i,:], x.shape[0], z.shape[0], interp_mode)
-        qv_ns_bc_tmp[t, :, i , :] = rgc.grid_points_change(qv[t,:z.shape[0],i,:], x.shape[0], z.shape[0], interp_mode)
-        pt_ns_bc_tmp[t, :, i , :] = rgc.grid_points_change(pt[t,:z.shape[0],i,:], x.shape[0], z.shape[0], interp_mode)
+        u_ns_bc_tmp[t, :, i , :] = rgc.grid_points_change(u[t, :, i, :], x.shape[0], z.shape[0], interp_mode)
+        v_ns_bc_tmp[t, :, i , :] = rgc.grid_points_change(v[t, :, i, :], x.shape[0], z.shape[0], interp_mode)
+        w_ns_bc_tmp[t, :, i , :] = rgc.grid_points_change(w[t, :, i, :], x.shape[0], z.shape[0], interp_mode)
+        qv_ns_bc_tmp[t, :, i , :] = rgc.grid_points_change(qv[t, :, i, :], x.shape[0], z.shape[0], interp_mode)
+        pt_ns_bc_tmp[t, :, i , :] = rgc.grid_points_change(pt[t, :, i, :], x.shape[0], z.shape[0], interp_mode)
         
-        u_ew_bc_tmp[t, :, : , i] = rgc.grid_points_change(u[t,:z.shape[0],:,i], y.shape[0], z.shape[0], interp_mode)
-        v_ew_bc_tmp[t, :, : , i] = rgc.grid_points_change(v[t,:z.shape[0],:,i], y.shape[0], z.shape[0], interp_mode)
-        w_ew_bc_tmp[t, :, : , i] = rgc.grid_points_change(w[t,:z.shape[0],:,i], y.shape[0], z.shape[0], interp_mode)
-        qv_ew_bc_tmp[t, :, : , i] = rgc.grid_points_change(qv[t,:z.shape[0],:,i], y.shape[0], z.shape[0], interp_mode)
-        pt_ew_bc_tmp[t, :, : , i] = rgc.grid_points_change(pt[t,:z.shape[0],:,i], y.shape[0], z.shape[0], interp_mode)
-
-
-u = u[:, :z.shape[0], :, :]
-v = v[:, :z.shape[0], :, :]
-w = w[:, :z.shape[0], :, :]
-qv = qv[:, :z.shape[0], :, :]
-pt = pt[:, :z.shape[0], :, :]
-
+        for x_idx in range(u_ns_bc_tmp.shape[3]) :
+            
+            u_ns_bc_tmp[t, int(nzt_ns[i, x_idx]):, i, x_idx] = rgc.grid_points_change_1darray(u_ns_bc_tmp[t, :, i, x_idx], nz - nzt_ns[i, x_idx])
+            u_ns_bc_tmp[t, :int(nzt_ns[i, x_idx]), i, x_idx] = np.nan
+            v_ns_bc_tmp[t, int(nzt_ns[i, x_idx]):, i, x_idx] = rgc.grid_points_change_1darray(v_ns_bc_tmp[t, :, i, x_idx], nz - nzt_ns[i, x_idx])
+            v_ns_bc_tmp[t, :int(nzt_ns[i, x_idx]), i, x_idx] = np.nan
+            w_ns_bc_tmp[t, int(nzt_ns[i, x_idx]):, i, x_idx] = rgc.grid_points_change_1darray(w_ns_bc_tmp[t, :, i, x_idx], nz - nzt_ns[i, x_idx])
+            w_ns_bc_tmp[t, :int(nzt_ns[i, x_idx]), i, x_idx] = np.nan
+            qv_ns_bc_tmp[t, int(nzt_ns[i, x_idx]):, i, x_idx] = rgc.grid_points_change_1darray(qv_ns_bc_tmp[t, :, i, x_idx], nz - nzt_ns[i, x_idx])
+            qv_ns_bc_tmp[t, :int(nzt_ns[i, x_idx]), i, x_idx] = np.nan
+            pt_ns_bc_tmp[t, int(nzt_ns[i, x_idx]):, i, x_idx] = rgc.grid_points_change_1darray(pt_ns_bc_tmp[t, :, i, x_idx], nz - nzt_ns[i, x_idx])
+            pt_ns_bc_tmp[t, :int(nzt_ns[i, x_idx]), i, x_idx] = np.nan
+        
+        u_ew_bc_tmp[t, :, : , i] = rgc.grid_points_change(u[t, :, :, i], y.shape[0], z.shape[0], interp_mode)
+        v_ew_bc_tmp[t, :, : , i] = rgc.grid_points_change(v[t, :, :, i], y.shape[0], z.shape[0], interp_mode)
+        w_ew_bc_tmp[t, :, : , i] = rgc.grid_points_change(w[t, :, :, i], y.shape[0], z.shape[0], interp_mode)
+        qv_ew_bc_tmp[t, :, : , i] = rgc.grid_points_change(qv[t, :, :, i], y.shape[0], z.shape[0], interp_mode)
+        pt_ew_bc_tmp[t, :, : , i] = rgc.grid_points_change(pt[t, :, :, i], y.shape[0], z.shape[0], interp_mode)
+        
+        for y_idx in range(u_ew_bc_tmp.shape[2]) :
+                
+            u_ew_bc_tmp[t, int(nzt_ew[i, y_idx]):, y_idx, i] = rgc.grid_points_change_1darray(u_ew_bc_tmp[t, :, y_idx, i], nz - nzt_ew[i, y_idx])
+            u_ew_bc_tmp[t, :int(nzt_ew[i, y_idx]), y_idx, i] = np.nan
+            v_ew_bc_tmp[t, int(nzt_ew[i, y_idx]):, y_idx, i] = rgc.grid_points_change_1darray(v_ew_bc_tmp[t, :, y_idx, i], nz - nzt_ew[i, y_idx])
+            v_ew_bc_tmp[t, :int(nzt_ew[i, y_idx]), y_idx, i] = np.nan
+            w_ew_bc_tmp[t, int(nzt_ew[i, y_idx]):, y_idx, i] = rgc.grid_points_change_1darray(w_ew_bc_tmp[t, :, y_idx, i], nz - nzt_ew[i, y_idx])
+            w_ew_bc_tmp[t, :int(nzt_ew[i, y_idx]), y_idx, i] = np.nan
+            qv_ew_bc_tmp[t, int(nzt_ew[i, y_idx]):, y_idx, i] = rgc.grid_points_change_1darray(qv_ew_bc_tmp[t, :, y_idx, i], nz - nzt_ew[i, y_idx])
+            qv_ew_bc_tmp[t, :int(nzt_ew[i, y_idx]), y_idx, i] = np.nan
+            pt_ew_bc_tmp[t, int(nzt_ew[i, y_idx]):, y_idx, i] = rgc.grid_points_change_1darray(pt_ew_bc_tmp[t, :, y_idx, i], nz - nzt_ew[i, y_idx])
+            pt_ew_bc_tmp[t, :int(nzt_ew[i, y_idx]), y_idx, i] = np.nan
+#        
+    u_top_bc_tmp[t, :, :] = rgc.grid_points_change(u[t, -1, :, :], x.shape[0], y.shape[0], interp_mode)
+    v_top_bc_tmp[t, :, :] = rgc.grid_points_change(v[t, -1, :, :], x.shape[0], y.shape[0], interp_mode)
+    w_top_bc_tmp[t, :, :] = rgc.grid_points_change(w[t, -1, :, :], x.shape[0], y.shape[0], interp_mode)
+    qv_top_bc_tmp[t, :, :] = rgc.grid_points_change(qv[t, -1, :, :], x.shape[0], y.shape[0], interp_mode)
+    pt_top_bc_tmp[t, :, :] = rgc.grid_points_change(pt[t, -1, :, :], x.shape[0], y.shape[0], interp_mode)
 
 ## geostrophic profiles calc
 file_forcing_d01 = sorted(glob.glob('raw_forcing/*' + wrf_domain + '*')) 
@@ -544,17 +569,19 @@ for d in range(zs.shape[0]) :
 init_soil_t = np.interp(dz_soil, zs, init_soil_t)
 init_soil_m = np.interp(dz_soil, zs, init_soil_m)
 
-for t in range(w.shape[0]) :  
-
-    top_u[t, :] = rgc.grid_points_change(u[t,-1,:,:], nc_ls_forcing_top_u.shape[2], nc_ls_forcing_top_u.shape[1], interp_mode)
-    top_v[t, :] = rgc.grid_points_change(v[t,-1,:,:], nc_ls_forcing_top_v.shape[2], nc_ls_forcing_top_v.shape[1], interp_mode)
-    top_w[t, :] = rgc.grid_points_change(w[t,-1,:,:], nc_ls_forcing_top_w.shape[2], nc_ls_forcing_top_w.shape[1], interp_mode)
-    top_qv[t, :] = rgc.grid_points_change(qv[t,-1,:,:], nc_ls_forcing_top_qv.shape[2], nc_ls_forcing_top_qv.shape[1], interp_mode)
-    top_pt[t, :] = rgc.grid_points_change(pt[t,-1,:,:], nc_ls_forcing_top_pt.shape[2], nc_ls_forcing_top_pt.shape[1], interp_mode)
-
-
 nc_init_soil_m[:] = init_soil_m
 nc_init_soil_t[:] = init_soil_t
+
+u_ns_bc_tmp[u_ns_bc_tmp == np.nan] = 0
+u_ew_bc_tmp[u_ew_bc_tmp == np.nan] = 0
+v_ns_bc_tmp[v_ns_bc_tmp == np.nan] = 0
+v_ew_bc_tmp[v_ew_bc_tmp == np.nan] = 0
+w_ns_bc_tmp[w_ns_bc_tmp == np.nan] = 0
+w_ew_bc_tmp[w_ew_bc_tmp == np.nan] = 0
+qv_ns_bc_tmp[qv_ns_bc_tmp == np.nan] = 0
+qv_ew_bc_tmp[qv_ew_bc_tmp == np.nan] = 0
+pt_ns_bc_tmp[pt_ns_bc_tmp == np.nan] = 0
+pt_ew_bc_tmp[pt_ew_bc_tmp == np.nan] = 0
 
 nc_ls_forcing_left_u[:] = u_ew_bc_tmp[:, :, :, 0]
 nc_ls_forcing_left_v[:] = v_ew_bc_tmp[:, :, :-1, 0]
@@ -580,39 +607,13 @@ nc_ls_forcing_south_w[:] = w_ns_bc_tmp[:, :-1, 0, :]
 nc_ls_forcing_south_qv[:] = qv_ns_bc_tmp[:, :, 0, :]
 nc_ls_forcing_south_pt[:] = pt_ns_bc_tmp[:, :, 0, :]
 
-nc_ls_forcing_top_u[:] = top_u
-nc_ls_forcing_top_v[:] = top_v
-nc_ls_forcing_top_w[:] = top_w
-nc_ls_forcing_top_qv[:] = top_qv
-nc_ls_forcing_top_pt[:] = top_pt
+nc_ls_forcing_top_u[:] = u_top_bc_tmp[:,:,:-1]
+nc_ls_forcing_top_v[:] = v_top_bc_tmp[:,:-1,:]
+nc_ls_forcing_top_w[:] = w_top_bc_tmp
+nc_ls_forcing_top_qv[:] = qv_top_bc_tmp
+nc_ls_forcing_top_pt[:] = pt_top_bc_tmp
 
 nc_output.close()
 
 print('Add to your *_p3d file the: ' + '\n soil_temperature = ' + repr(init_soil_t) + '\n soil_moisture = ' + repr(init_soil_m) + '\n deep_soil_temperature = ' + repr(init_soil_tmn))
-
-# Modify namelist to change case specifications
-
-#nml = f90nml.read(case_name + '_p3d')
-
-#nml['initialization_parameters']['nx'] = int(nx)
-#nml['initialization_parameters']['ny'] = int(ny)
-#nml['initialization_parameters']['nz'] = int(nz)
-#nml['initialization_parameters']['dx'] = int(dx)
-#nml['initialization_parameters']['dy'] = int(dy)
-#nml['initialization_parameters']['dz'] = int(dz)
-#
-#nml['runtime_parameters']['end_time'] = int(times_sec[-1])
-#
-#nml.write(case_name + '_p3d_new')
-
-
-
-#patch_nml = {'initialization_parameters': {'nx': int(nx-1)}}
-#patch_nml = {'initialization_parameters': {'ny': int(ny-1)}}
-#patch_nml = {'initialization_parameters': {'nz': int(nz)}}
-#patch_nml = {'initialization_parameters': {'dx': int(dx)}}
-#patch_nml = {'initialization_parameters': {'dy': int(dy)}}
-#patch_nml = {'initialization_parameters': {'dz': int(dz)}}
-#
-#f90nml.patch(case_name + '_p3d', patch_nml, case_name + '_p3d_new')
 

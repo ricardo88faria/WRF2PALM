@@ -35,7 +35,6 @@ import time
 import pandas as pd
 from pyproj import Proj
 import read_geo as rg
-#import calc_distance as cd
 import res_grid_change as rgc
 import nearest
 import matplotlib.pyplot as plt
@@ -94,10 +93,6 @@ lon = np.arange(lon[0], lon[-1], dx)
 lat = np.arange(lat[0], lat[-1], dy)
 #plt.imshow(topo_res)
 
-#start_x = lon[0]
-#start_y = lat[0]
-#end_x = lon[-1]
-#end_y = lat[-1]
 
 x_dist = lon[-1]-lon[0] #cd.calc_distance_convert_utm(lat[0], lon[0], lat[0], lon[-1], zone = '28')
 y_dist = lat[-1]-lat[0] #cd.calc_distance(lat[0], lon[0], lat[-1], lon[0])
@@ -117,6 +112,8 @@ if not bool(int(ny-1) & 1) :
     lat = lat[:-1]
     topo_res = topo_res[:-1, :]
     
+topo_res = dz * np.round(topo_res/dz)
+
 plt.pcolormesh(topo_res);plt.colorbar(); plt.show()
 
 print('Number o grid points x, y = ' + str(topo_res.shape[1]-1) + ', ' + str(topo_res.shape[0]-1))
@@ -159,14 +156,12 @@ nc_topo.units = 'm'
 #nc_topo.grid_mapping = 'crsUTM: E_UTM N_UTM crsETRS: lon lat'
 
 # set let bottom corner to 0 meters
-#lon = np.arange(0, x_dist+1, dx)
-#lat = np.arange(0, y_dist+1, dy)
 lon = lon - lon[0]
 lat = lat - lat[0]
 
 nc_x[:] = np.arange(lon[1]/2, dx*nx+1, dx) # lon #np.arange(0, dx*nx, dx)
 nc_y[:] = np.arange(lat[1]/2, dy*ny+1, dy) # lat #np.arange(0, dy*ny, dy)
-nc_topo[:] = topo_res[:-1,:-1]  # still to review!!!
+nc_topo[:] = topo_res[:-1,:-1] 
 
 nc_output.close()
 
@@ -180,6 +175,3 @@ print('Process finished! Topo is created with following specs in centered grids:
 cfg = pd.DataFrame({'dx': [dx], 'dy': [dy], 'dz': [dz], 'nx': [nx], 'ny': [ny], 'nz': [nz], 'north': [north], 'south': [south], 'east': [east], 'west': [west]}) #, 'north_lat': [north_lat], 'south_lat': [south_lat], 'east_lon': [east_lon], 'west_lon': [west_lon]
 cfg.to_csv(case_name + '.cfg', index=None)  # str(dx) + '_' + str(dy) +
 
-
-
-# check if is evern or odd for multi processing
