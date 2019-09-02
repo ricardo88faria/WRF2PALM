@@ -41,26 +41,18 @@ def grid_points_change(data, out_x, out_y, method) :
     return data_res
 
 
-def grid_points_change_1darray(data, out_x, method) :
+def grid_points_change_1darray(data, out_x) :
 
     '''
 
-    2d matrix data, x number of points out_x, y number of points out_y, method 'linear' or 'nearest'
+    1d matrix data, x number of points out_x. Output a linear interpolated array
 
     '''
-    
-#    m = max(data.shape[0], data.shape[1])
-#    y = np.linspace(0, 1.0/m, data.shape[0])
-#    x = np.linspace(0, 1.0/m, data.shape[1])
-#    
-#    yv, xv = np.meshgrid(np.linspace(0, 1.0/m, out_x), np.linspace(0, 1.0/m, out_y))
     
     x = np.arange(0, data.shape[0], 1)
-    interpolating_function = RegularGridInterpolator((x), data, method = method)
-
-    yv, xv = np.meshgrid(np.linspace(x[0], x[-1], out_x), np.linspace(y[0], y[-1], out_y))
+    xvals = np.linspace(0, data.shape[0], out_x)
     
-    data_res = interpolating_function((xv, yv))
+    data_res = np.interp(xvals, x, data)
 
     return data_res
 
