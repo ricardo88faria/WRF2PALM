@@ -16,7 +16,7 @@ In order to create WRF forcing, create_dynamic.py script is run. WRF outputs mus
 If user didnt run create_static_topo script, a .cgf file must be setup with dx, dy, dz, nx, ny, nz, north, south, east and west fields.
 
 3. 1. WRF radiation forcing (create_radiation):
-<span style="color:red">Don't use, it is not ready fully developed in PALM!!!</span>
+Don't use, it is not ready fully developed in PALM!!!
 If user want to force PALM with short and long wave radiation data, create_radiation.py must be run after create_dynamic.py. Script modify dynamic file and adds 2d radiation varying in time data usable in PALM.
 
 **Contacts:**
